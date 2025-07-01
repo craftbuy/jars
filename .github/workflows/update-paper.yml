@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       minecraft_version:
-        description: 'Minecraft version (e.g. 1.21.6)'
+        description: 'Minecraft version (e.g. 1.21.7)'
         required: false
-        default: '1.21.6'
+        default: '1.21.7'
         type: string
       project:
         description: 'Project type (paper, waterfall, etc)'
@@ -19,7 +19,7 @@ on:
     - cron: '0 0 * * 0'
 
 env:
-  DEFAULT_MINECRAFT_VERSION: '1.21.6'
+  DEFAULT_MINECRAFT_VERSION: '1.21.7'
 
 permissions:
   contents: write
