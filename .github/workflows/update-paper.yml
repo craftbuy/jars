@@ -16,7 +16,7 @@ on:
   
   # Запускать каждое воскресенье в 00:00 UTC
   schedule:
-    - cron: '0 0 * * 0'
+    - cron: '0 0 * * *'
 
 env:
   DEFAULT_MINECRAFT_VERSION: '1.21.7'
