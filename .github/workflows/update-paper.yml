@@ -14,7 +14,7 @@ on:
         default: 'paper'
         type: string
   
-  # Запускать каждое воскресенье в 00:00 UTC
+  # Run every Sunday at 00:00 UTC
   schedule:
     - cron: '0 0 * * *'
 
@@ -34,7 +34,7 @@ jobs:
     - name: Determine Minecraft version
       id: version
       run: |
-        # Используем введенную версию или версию по умолчанию
+        # Use the entered version or the default version
         if [ -z "${{ github.event.inputs.minecraft_version }}" ]; then
           echo "version=$DEFAULT_MINECRAFT_VERSION" >> $GITHUB_OUTPUT
         else
@@ -55,24 +55,24 @@ jobs:
         VERSION: ${{ steps.version.outputs.version }}
         USER_AGENT: github-actions-paper-updater/1.0.0
       run: |
-        # Получаем данные о сборках
+        # Getting data on builds
         response=$(curl -s -H "User-Agent: $USER_AGENT" \
           "https://fill.papermc.io/v3/projects/$PROJECT/versions/$VERSION/builds")
         
-        # Проверяем наличие ошибки
+        # Checking for an error
         if echo "$response" | jq -e 'type == "object" and has("error")' > /dev/null; then
           error_msg=$(echo "$response" | jq -r '.error')
           echo "::error ::API error: $error_msg"
           exit 1
         fi
         
-        # Проверяем что ответ - непустой массив
+        # Check that the answer is a non-empty array
         if echo "$response" | jq -e 'type != "array" or length == 0' > /dev/null; then
           echo "::error ::No builds found for $PROJECT $VERSION"
           exit 1
         fi
         
-        # Извлекаем последний билд (с наибольшим ID)
+        # Extract the last build (with the highest ID)
         paper_url=$(echo "$response" | jq -r \
           'sort_by(-.id) | .[0].downloads."server:default".url')
         
@@ -81,7 +81,7 @@ jobs:
           exit 1
         fi
         
-        # Получаем номер билда для информации
+        # Getting the build number for information
         build_id=$(echo "$response" | jq -r 'sort_by(-.id) | .[0].id')
         echo "build_id=$build_id" >> $GITHUB_OUTPUT
         echo "url=$paper_url" >> $GITHUB_OUTPUT
