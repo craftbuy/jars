@@ -1,0 +1,106 @@
+name: Update Paper Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      minecraft_version:
+        description: 'Minecraft version (e.g. 1.21.8)'
+        required: false
+        default: '1.21.8'
+        type: string
+      project:
+        description: 'Project type (paper, waterfall, etc)'
+        required: false
+        default: 'paper'
+        type: string
+  
+  # Run every Sunday at 00:00 UTC
+  schedule:
+    - cron: '0 0 * * *'
+
+env:
+  DEFAULT_MINECRAFT_VERSION: '1.21.8'
+
+permissions:
+  contents: write
+
+jobs:
+  download-paper:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Determine Minecraft version
+      id: version
+      run: |
+        # Use the entered version or the default version
+        if [ -z "${{ github.event.inputs.minecraft_version }}" ]; then
+          echo "version=$DEFAULT_MINECRAFT_VERSION" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.event.inputs.minecraft_version }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Setup variables
+      id: vars
+      run: |
+        filename="paper-${{ steps.version.outputs.version }}.jar"
+        echo "filename=$filename" >> $GITHUB_OUTPUT
+        echo "filepath=paper/$filename" >> $GITHUB_OUTPUT
+
+    - name: Get latest Paper build
+      id: paper-api
+      env:
+        PROJECT: ${{ github.event.inputs.project || 'paper' }}
+        VERSION: ${{ steps.version.outputs.version }}
+        USER_AGENT: github-actions-paper-updater/1.0.0
+      run: |
+        # Getting data on builds
+        response=$(curl -s -H "User-Agent: $USER_AGENT" \
+          "https://fill.papermc.io/v3/projects/$PROJECT/versions/$VERSION/builds")
+        
+        # Checking for an error
+        if echo "$response" | jq -e 'type == "object" and has("error")' > /dev/null; then
+          error_msg=$(echo "$response" | jq -r '.error')
+          echo "::error ::API error: $error_msg"
+          exit 1
+        fi
+        
+        # Check that the answer is a non-empty array
+        if echo "$response" | jq -e 'type != "array" or length == 0' > /dev/null; then
+          echo "::error ::No builds found for $PROJECT $VERSION"
+          exit 1
+        fi
+        
+        # Extract the last build (with the highest ID)
+        paper_url=$(echo "$response" | jq -r \
+          'sort_by(-.id) | .[0].downloads."server:default".url')
+        
+        if [ "$paper_url" = "null" ] || [ -z "$paper_url" ]; then
+          echo "::error ::Failed to extract download URL"
+          exit 1
+        fi
+        
+        # Getting the build number for information
+        build_id=$(echo "$response" | jq -r 'sort_by(-.id) | .[0].id')
+        echo "build_id=$build_id" >> $GITHUB_OUTPUT
+        echo "url=$paper_url" >> $GITHUB_OUTPUT
+
+    - name: Download PaperMC server
+      run: |
+        mkdir -p paper
+        curl -sSL -o "${{ steps.vars.outputs.filepath }}" \
+          "${{ steps.paper-api.outputs.url }}"
+        echo "Downloaded build ${{ steps.paper-api.outputs.build_id }}"
+
+    - name: Commit changes
+      run: |
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git add paper/
+        if git diff-index --quiet HEAD --; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update Paper to ${{ steps.version.outputs.version }} (build ${{ steps.paper-api.outputs.build_id }})"
+          git push
+        fi
